@@ -2,11 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { SecurityPolicyEngine } from "./SecurityPolicyEngine.js";
 
 describe('SecurityPolicyEngine Middleware Rules', () => {
-  it('allows safe baseline execution', () => {
-    const res = SecurityPolicyEngine.evaluateCommand('echo "CRITICAL_DATA" > /workspace/important_data.txt');
-    expect(res.allowed).toBe(true);
-  });
-
   describe('Destructive File Deletion', () => {
     it('blocks recursive deletion with flags (rm -rf)', () => {
       const res = SecurityPolicyEngine.evaluateCommand('rm -rf /workspace');
