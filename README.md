@@ -344,6 +344,8 @@ Skip this step if you are already working from the repository root.
 ```bash
 ARK_API_KEY=your-ark-api-key \
 ARK_MODEL=ep-your-endpoint-id \
+ARK_BASE_URL=your-ak-base-url \
+APP_AUTH_TOKEN=your-random-32-char-string
 npm run poc
 ```
 
@@ -383,10 +385,11 @@ xdg-open http://localhost:3000
 
 In the Web UI:
 
-1. Select **Create Agent**.
-2. Enter a name, description, and workspace instructions.
-3. Select **Create Agent** again.
-4. Enter a task in the Playground.
+1. Login with your 32 random character string.
+2. Select **Create Agent**.
+3. Enter a name, description, and workspace instructions.
+4. Select **Create Agent** again.
+5. Enter a task in the Playground.
 
 For example:
 
