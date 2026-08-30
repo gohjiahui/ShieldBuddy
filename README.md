@@ -492,3 +492,7 @@ flowchart LR
 ```
 
 This allows ShieldBuddy to intercept known dangerous prompt patterns **before they reach the Agent runtime**.
+
+# Demo
+[demo_tiktoktechjam_jiahui.zip](https://github.com/user-attachments/files/31617898/demo_tiktoktechjam_jiahui.zip)
+
