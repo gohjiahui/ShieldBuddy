@@ -7,6 +7,7 @@ import { z } from "zod";
 import type { AppConfig } from "./config.js";
 import { HttpError } from "./errors.js";
 import type { AgentService } from "./agent-service.js";
+import { SecurityPolicyEngine } from "./SecurityPolicyEngine.js";
 
 const agentIdParams = z.object({ id: z.string().uuid() });
 const runIdParams = z.object({ id: z.string().uuid() });
@@ -21,6 +22,7 @@ const updateAgentBody = createAgentBody.partial().refine(
 );
 const messageBody = z.object({
   content: z.string().trim().min(1).max(50_000),
+  confirmed: z.boolean().optional(),//added
 });
 
 export async function createApp(
@@ -118,10 +120,12 @@ export async function createApp(
 
   app.post("/api/agents/:id/messages", async (request, reply) => {
     const { id } = agentIdParams.parse(request.params);
-    const body = messageBody.parse(request.body);
-    const result = await service.sendMessage(id, body.content);
+    const { content } = messageBody.parse(request.body);
+
+    const result = await service.sendMessage(id, content);
     return reply.code(202).send(result);
   });
+
 
   app.get("/api/runs/:id", async (request) => {
     const { id } = runIdParams.parse(request.params);

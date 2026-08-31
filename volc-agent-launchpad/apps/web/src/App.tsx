@@ -245,6 +245,48 @@ export default function App() {
     }
   };
 
+  // added (Button Click Handlers)
+  const handleApproval = async (decision: "yes" | "no", messageId?: string) => {
+    if (!selected) return;
+
+    // Find the target message ID if not provided explicitly
+    const targetId = messageId ?? messages.find((msg) => msg?.policy?.status === "pending")?.id;
+
+    if (targetId) {
+      const newStatus = decision === "yes" ? "approved" : "rejected";
+      setMessages((current) =>
+        current.map((msg) =>
+          msg.id === targetId && msg.policy
+            ? { ...msg, policy: { ...msg.policy, status: newStatus } }
+            : msg
+        )
+      );
+    }
+
+    setError(null);
+    setBusy(true);
+
+    try {
+      const result = await api.sendMessage(selected.id, decision);
+      if (selectedIdRef.current === selected.id) {
+        setMessages((current) => [...current, result.message]);
+        setActiveRun(result.run);
+      }
+      setAgents((current) =>
+        current.map((agent) =>
+          agent.id === selected.id ? { ...agent, status: "busy" } : agent,
+        ),
+      );
+      await pollRun(result.run.id, selected.id);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+      setActiveRun(null);
+      await refreshAgents();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const unlock = async (event: React.FormEvent) => {
     event.preventDefault();
     setBusy(true);
@@ -305,6 +347,19 @@ export default function App() {
       </main>
     );
   }
+
+  //added (Disable User Input Field)
+  // Explicitly check that the pending status belongs to the latest assistant prompt
+  // const isPendingApproval = useMemo(() => {
+  //   if (!selected || !Array.isArray(messages) || messages.length === 0) return false;
+    
+  //   const lastMsg = messages[messages.length - 1];
+    
+  //   return (
+  //     lastMsg?.role === "assistant" && 
+  //     lastMsg?.policy?.status === "pending"
+  //   );
+  // }, [selected, messages]);
 
   return (
     <div className="app-shell">
@@ -517,6 +572,35 @@ export default function App() {
                         <span>{formatTime(message.createdAt)}</span>
                       </div>
                       <div className="message-body">{message.content}</div>
+
+                      {/* Inserting pop-up card here */}
+                      {message?.policy?.status === "pending" && (
+                        <div className="approval-card">
+                          {/* <div className="approval-header"> */}
+                            {/* <span className="approval-badge">⚠️ Action Required</span> */}
+                            {/* <span className="approval-category">{String(message.policy.category ?? "")}</span> */}
+                          {/* </div> */}
+                          <p className="approval-prompt">{String(message.policy.promptUser ?? "")}</p>
+                          <div className="approval-actions">
+                            <button
+                              type="button"
+                              className="button button-primary approve-btn"
+                              onClick={() => handleApproval("yes")}
+                              disabled={busy}
+                            >
+                              {busy ? <Spinner /> : "Yes, Proceed"}
+                            </button>
+                            <button
+                              type="button"
+                              className="button button-danger reject-btn"
+                              onClick={() => handleApproval("no")}
+                              disabled={busy}
+                            >
+                              No, Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </article>
                   ))
                 )}
@@ -542,44 +626,59 @@ export default function App() {
               </div>
 
               <form className="composer" onSubmit={sendMessage}>
-                <textarea
-                  value={prompt}
-                  onChange={(event) => setPrompt(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      event.currentTarget.form?.requestSubmit();
-                    }
-                  }}
-                  placeholder={
-                    selected.status === "stopped"
+                {(() => {
+                  // Derive pending state safely inside the composer form scope only
+                  const lastMsg = messages[messages.length - 1];
+                  const isPendingApproval =
+                    lastMsg?.role === "assistant" && lastMsg?.policy?.status === "pending";
+                return(
+                    <>
+                  <textarea
+                    value={prompt}
+                    onChange={(event) => setPrompt(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        event.currentTarget.form?.requestSubmit();
+                      }
+                    }}
+                    placeholder={
+                      isPendingApproval
+                      ? "Approval required. Please confirm using the actions above…"
+                      : 
+                      selected.status === "stopped"
                       ? "Start this Agent to continue…"
                       : "Describe what you want the Agent to do…"
-                  }
-                  disabled={
-                    selected.status === "stopped" ||
-                    selected.status === "busy" ||
-                    activeRun != null && ["queued", "running"].includes(activeRun.status)
-                  }
-                  rows={3}
-                />
-                <div className="composer-footer">
-                  <span>
-                    Enter to send · Shift + Enter for newline · {system?.codexSandboxMode ?? "checking sandbox"}
-                  </span>
-                  <button
-                    className="send-button"
+                    }
                     disabled={
-                      !prompt.trim() ||
+                      isPendingApproval || // <--- Disable if awaiting approval
                       selected.status === "stopped" ||
                       selected.status === "busy" ||
-                      (activeRun != null && ["queued", "running"].includes(activeRun.status))
+                      activeRun != null && ["queued", "running"].includes(activeRun.status)
                     }
-                    aria-label="Send message"
-                  >
-                    ↑
-                  </button>
-                </div>
+                    rows={3}
+                  />
+                  <div className="composer-footer">
+                    <span>
+                      Enter to send · Shift + Enter for newline · {system?.codexSandboxMode ?? "checking sandbox"}
+                    </span>
+                    <button
+                      className="send-button"
+                      disabled={
+                        isPendingApproval || // <--- Disable if awaiting approval
+                        !prompt.trim() ||
+                        selected.status === "stopped" ||
+                        selected.status === "busy" ||
+                        (activeRun != null && ["queued", "running"].includes(activeRun.status))
+                      }
+                      aria-label="Send message"
+                    >
+                      ↑
+                    </button>
+                  </div>
+                  </>
+                );
+                })()}
               </form>
             </section>
           </>

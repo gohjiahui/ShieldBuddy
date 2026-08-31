@@ -15,9 +15,19 @@ import { WorkspaceManager } from "./workspace.js";
 
 const now = () => new Date().toISOString();
 
+//added
+interface PendingApproval {
+  runId: string;
+  agentId: string;
+  prompt: string;
+  policy: { category: string; reason: string; promptUser: string };
+}
+
 export class AgentService {
   private readonly activeExecutions = new Map<string, Promise<void>>();
   private readonly cancellationRequests = new Set<string>();
+  // 1. Add map to track agents waiting for user confirmation
+  private readonly pendingApprovals = new Map<string, PendingApproval>();
 
   constructor(
     private readonly config: AppConfig,
@@ -153,6 +163,7 @@ export class AgentService {
   async sendMessage(
     agentId: string,
     prompt: string,
+    confirmed?: boolean, // Pass optional confirmation state
   ): Promise<{ run: AgentRun; message: Message }> {
     if (!isArkConfigured(this.config)) {
       throw new HttpError(
@@ -160,6 +171,24 @@ export class AgentService {
         "Ark is not configured. Set ARK_API_KEY and ARK_MODEL, then restart.",
       );
     }
+    const cleanInput = prompt.trim().toLowerCase();
+    const pending = this.pendingApprovals.get(agentId);
+    // 2. Intercept "yes" or "no" text responses if a pending command exists
+    if (pending) {
+      if (cleanInput === "yes" || confirmed === true) {
+        const originalPrompt = pending.prompt;
+        this.pendingApprovals.delete(agentId);
+        // Re-issue the original prompt with confirmed = true
+        return this.sendMessage(agentId, originalPrompt, true);
+      }
+
+      if (cleanInput === "no" || confirmed === false) {
+        this.pendingApprovals.delete(agentId);
+        // Create a cancelled run entry with user feedback
+        return this.createCancelledRun(agentId, prompt);
+      }
+    }
+
     const timestamp = now();
     const runId = randomUUID();
     const run: AgentRun = {
@@ -201,7 +230,7 @@ export class AgentService {
       storedAgent.updatedAt = timestamp;
       return snapshot;
     });
-    const execution = this.executeRun(agentAtStart, run);
+    const execution = this.executeRun(agentAtStart, run, confirmed); //added confirmed param
     this.activeExecutions.set(agentId, execution);
     void execution
       .finally(() => {
@@ -265,7 +294,7 @@ export class AgentService {
   //   });
   // }
 
-  private async executeRun(agentAtStart: Agent, run: AgentRun): Promise<void> {
+  private async executeRun(agentAtStart: Agent, run: AgentRun, confirmed?: boolean): Promise<void> {
     await this.store.mutate((database) => {
       const storedRun = database.runs.find((item) => item.id === run.id);
       if (storedRun) {
@@ -279,12 +308,60 @@ export class AgentService {
       }
       const result = await this.runner.run({
         agentId: agentAtStart.id,
-        runId: run.id,// pass run.id to runner
+        runId: run.id,
         workspacePath: agentAtStart.workspacePath,
         prompt: run.prompt,
         threadId: agentAtStart.codexThreadId,
+        ...(confirmed !== undefined ? { confirmed } : {}), // added confirmed param to runner request
       });
+
       const completedAt = now();
+
+      // 3. Handle AWAITING_APPROVAL status
+      if (result.status === "awaiting_approval") {
+        // const resAny = result as unknown as Record<string, unknown>;
+        // const category = typeof resAny.category === "string" ? resAny.category : "approval_required";
+        // Track the pending prompt so the next "yes" resumes it
+        this.pendingApprovals.set(agentAtStart.id, {
+          runId: run.id,
+          agentId: agentAtStart.id,
+          prompt: run.prompt,
+          policy: {
+            category: result.category ?? "approval_required",
+            reason: result.output ?? "Approval required before continuing.",
+            promptUser: result.output ?? "Please confirm you want to continue.",
+          },
+        });
+
+        await this.store.mutate((database) => {
+          const storedRun = database.runs.find((item) => item.id === run.id);
+          const agent = database.agents.find((item) => item.id === agentAtStart.id);
+          if (!storedRun || !agent) return;
+          storedRun.status = "completed";
+          storedRun.output = result.output;
+          storedRun.usage = result.usage;
+          storedRun.completedAt = completedAt;
+          database.messages.push({
+            id: randomUUID(),
+            agentId: agent.id,
+            runId: run.id,
+            role: "assistant",
+            content: result.output,
+            createdAt: completedAt,
+            policy: {
+              category: result.category ?? "approval_required",
+              promptUser: result.output ?? "Please confirm you want to continue.",
+              status: "pending",
+            },
+          });
+          agent.status = "ready";
+          agent.codexThreadId = result.threadId;
+          agent.lastError = null;
+          agent.updatedAt = completedAt;
+        });
+        return;
+      }
+
       await this.store.mutate((database) => {
         const storedRun = database.runs.find((item) => item.id === run.id);
         const agent = database.agents.find((item) => item.id === agentAtStart.id);
@@ -327,6 +404,54 @@ export class AgentService {
         }
       });
     }
+  }
+
+  //added
+  private async createCancelledRun(
+    agentId: string,
+    userInput: string,
+  ): Promise<{ run: AgentRun; message: Message }> {
+    const timestamp = now();
+    const runId = randomUUID();
+    const cancelOutput = "Action cancelled by user.";
+
+    const run: AgentRun = {
+      id: runId,
+      agentId,
+      status: "cancelled",
+      prompt: userInput,
+      output: cancelOutput,
+      error: null,
+      usage: null,
+      startedAt: timestamp,
+      completedAt: timestamp,
+      createdAt: timestamp,
+    };
+
+    const userMessage: Message = {
+      id: randomUUID(),
+      agentId,
+      runId,
+      role: "user",
+      content: userInput,
+      createdAt: timestamp,
+    };
+
+    const assistantMessage: Message = {
+      id: randomUUID(),
+      agentId,
+      runId,
+      role: "assistant",
+      content: cancelOutput,
+      createdAt: timestamp,
+    };
+
+    await this.store.mutate((db) => {
+      db.runs.push(run);
+      db.messages.push(userMessage, assistantMessage);
+    });
+
+    return { run, message: assistantMessage };
   }
 
   private async setStatus(id: string, status: Agent["status"]): Promise<Agent> {
