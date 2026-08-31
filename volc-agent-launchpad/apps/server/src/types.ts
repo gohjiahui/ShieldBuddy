@@ -22,6 +22,11 @@ export interface Message {
   role: MessageRole;
   content: string;
   createdAt: string;
+  policy?: { //added policy payload
+    category: string;
+    promptUser: string;
+    status: "pending" | "approved" | "rejected";
+  };
 }
 
 export interface RunUsage {
@@ -66,6 +71,8 @@ export interface RunnerResult {
   output: string;
   threadId: string | null;
   usage: RunUsage | null;
+  status?: "completed" | "blocked" | "awaiting_approval" | "cancelled"; // Add status options
+  category?: string;
 }
 
 export interface RunnerRequest {
@@ -74,6 +81,7 @@ export interface RunnerRequest {
   workspacePath: string;
   prompt: string;
   threadId: string | null;
+  confirmed?: boolean; // added confirmed flag
 }
 
 export interface AgentRunner {

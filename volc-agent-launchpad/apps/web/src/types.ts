@@ -21,6 +21,11 @@ export interface Message {
   role: "user" | "assistant";
   content: string;
   createdAt: string;
+  policy?: {
+    category: string;
+    promptUser: string;
+    status: "pending" | "approved" | "rejected";
+  };
 }
 
 export interface AgentRun {

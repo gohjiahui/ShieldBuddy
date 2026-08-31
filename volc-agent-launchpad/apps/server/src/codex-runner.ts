@@ -9,6 +9,7 @@ import type {
   RunnerRequest,
   RunnerResult,
 } from "./types.js";
+import { SecurityPolicyEngine } from "./SecurityPolicyEngine.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -17,6 +18,7 @@ export interface ParsedEvents {
   threadId: string | null;
   usage: RunUsage | null;
   errors: string[];
+  category?: string;
 }
 
 export function buildCodexArgs(
@@ -33,6 +35,9 @@ export function buildCodexArgs(
     "-C",
     workspacePath,
   ];
+  // if (request.confirmed) {
+  //   args.push("--confirmed"); // or modify request.prompt to include explicit user approval
+  // }
   if (request.threadId) {
     args.push("resume", request.threadId, request.prompt);
   } else {
@@ -85,6 +90,19 @@ export function parseCodexEventLine(line: string, parsed: ParsedEvents): void {
     parsed.errors.push(message);
   }
 }
+
+// export function extractCategoryFromOutput(output: string): string | null {
+//   const matches = [
+//     output.match(/\[(?:CATEGORY|category)\s*:\s*([A-Za-z0-9_-]+)\]/i),
+//     output.match(/\b(?:category|CATEGORY)\s*[:=]\s*([A-Za-z0-9_-]+)/i),
+//   ];
+
+//   for (const match of matches) {
+//     if (match?.[1]) return match[1];
+//   }
+
+//   return null;
+// }
 
 export class CodexRunner implements AgentRunner {
   private readonly active = new Map<
@@ -215,6 +233,17 @@ export class CodexRunner implements AgentRunner {
       if (!output) {
         throw new Error("Codex completed without an agent message");
       }
+      // // Intercept approval request markers from output/parsed events (added)
+      // if (output.includes("[APPROVAL REQUIRED]") && !request.confirmed) {
+      //   const policy = SecurityPolicyEngine.evaluateCommand(output);
+      //   return {
+      //     status: "awaiting_approval",
+      //     output,
+      //     threadId: parsed.threadId,
+      //     usage: parsed.usage,
+      //     category: policy.category ?? "unknown",
+      //   };
+      // }
       return {
         output,
         threadId: parsed.threadId,

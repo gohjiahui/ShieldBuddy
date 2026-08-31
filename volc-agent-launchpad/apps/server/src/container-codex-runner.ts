@@ -148,31 +148,25 @@ export class ContainerCodexRunner implements AgentRunner {
   async run(request: RunnerRequest): Promise<RunnerResult> {
     // 1. ADD SECURITY CHECK HERE
     const inputPrompt = request.prompt;
-    const policyResult = SecurityPolicyEngine.evaluateCommand(inputPrompt);
-    if (!policyResult.allowed) {
-      // // 2. Record violation payload to store
-      // if (this.agentService) {
-      //   await this.agentService.recordPolicyViolation(request.runId, {
-      //     type: "POLICY_VIOLATION",
-      //     timestamp: new Date().toISOString(),
-      //     category: policyResult.category ?? "SECURITY_KILL_SWITCH",
-      //     reason: policyResult.reason ?? "Blocked by security policy.",
-      //     blockedCommand: inputPrompt,
-      //   });
-      // }
+    const policy = SecurityPolicyEngine.evaluateCommand(inputPrompt);
 
-      // Throw an explicit error to halt downstream execution and stop retries
-      throw new Error(`[KILL SWITCH ACTIVATED] Action blocked: ${policyResult.reason}`);
+    // 1. Hard Block / Kill Switch
+    if (policy.action === "DENY") { 
+      throw new Error(`[KILL SWITCH ACTIVATED] ${policy.reason}`);
     }
 
-    //   // 3. SYNTHETIC RETURN: Short-circuits execution completely!
-    //   // No "codex" binary or Docker container is ever invoked.
-    //   return {
-    //     output: `[KILL SWITCH ACTIVATED] Action blocked: ${policyResult.reason}`,
-    //     threadId: request.threadId,
-    //     usage: null,
-    //   };
-    // }
+    // 2. Execution-level Warning / Approval Required
+    if (policy.action === "WARN_APPROVAL_REQUIRED" && !request.confirmed) {
+      return {
+        status: "awaiting_approval",
+        output: `[APPROVAL REQUIRED] ${policy.promptUser}`,
+        threadId: request.threadId,
+        usage: null,
+        category: policy.category ?? "unknown",
+      };
+    }
+
+  //till here
 
     if (this.active.has(request.agentId)) {
       throw new Error("Agent already has an active Runtime container");
