@@ -1,4 +1,4 @@
-# ShieldBuddy
+# ShieldBuddy🛡️🤖
 
 **The security middleware for AI agents**
 
@@ -316,7 +316,7 @@ ShieldBuddy detects the system file access attempt and requests explicit approva
 
 # Testing ShieldBuddy
 
-All sample scenarios can be tested through either:
+More scenarios can be tested through either:
 
 * The Volc Agent Launchpad GUI
 * `curl`
