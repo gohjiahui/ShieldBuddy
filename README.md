@@ -59,9 +59,8 @@ These actions could expose sensitive information or reveal details about the und
 
 Without appropriate guardrails, malicious or unintended prompts could cause the Volc Agent Launchpad to expose sensitive information or perform undesirable actions.
 
-Specific Agentic AI threats
-
-**OWASP ASI05 — Unexpected Code Execution**
+#### Specific Agentic AI threats
+#### OWASP ASI05 — Unexpected Code Execution
 
 A user, repository, or external source may introduce instructions that cause an Agent to execute commands that were not intended as part of the original task.
 
@@ -75,9 +74,9 @@ Unexpected command execution
 Potential file deletion, system modification, or secret exposure
 ```
 
-Without ShieldBuddy, these instructions may reach the Agent runtime without an additional policy decision point.
+These instructions may reach the Agent runtime without an additional policy decision point.
 
-**OWASP ASI03 — Identity and Privilege Misuse**
+#### OWASP ASI03 — Identity and Privilege Misuse
 
 An Agent may be instructed to perform actions that require elevated privileges or access resources beyond the intended scope of the task.
 
@@ -91,7 +90,7 @@ Privilege escalation or unauthorized access attempt
 Potential misuse of system permissions or protected resources
 ```
 
-Without ShieldBuddy, privilege-related actions may be attempted without being intercepted by the security policy layer.
+Privilege-related actions may be attempted without being intercepted by the security policy layer.
 
 **ShieldBuddy was created to address these risks.**
 
